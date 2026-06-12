@@ -13,9 +13,7 @@ const FIREBASE_CONFIG = {
   appId: "1:1046861092853:web:06151f3e68ec13f77832bc"
 };
 
-const FUNCTION_URL = "https://generatearticle-xa6oqj2c3a-an.a.run.app";
-
-const firebaseApp = initializeApp(FIREBASE_CONFIG);
+const FUNCTION_URL = "https://asia-northeast1-daurat-b5aef.cloudfunctions.net/generateArticle";const firebaseApp = initializeApp(FIREBASE_CONFIG);
 const rtdb = getDatabase(firebaseApp);
 const firestore = getFirestore(firebaseApp);
 
