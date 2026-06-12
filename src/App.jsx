@@ -262,7 +262,11 @@ export default function App() {
     setConfirmEnd(false);syncToRTDB(nm,roster);setTab(0);
   };
 
-  const openDetail=(type)=>{setPending(type);setDetTeam("home");setDetNum("");};
+  const openDetail=(type)=>{
+    setPending(type);
+    setDetTeam(type==="concede"?"away":"home");
+    setDetNum("");
+  };
 
   const commitEv=(type,team,num)=>{
     const def=EV_DEF[type];if(!def)return;

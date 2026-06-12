@@ -9,35 +9,41 @@ exports.generateArticle = onRequest((req, res) => {
   res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.set("Access-Control-Allow-Headers", "Content-Type");
 
-  if (req.method === "OPTIONS") {
-    res.status(204).send("");
-    return;
-  }
-
-  if (req.method !== "POST") {
-    res.status(405).send("Method Not Allowed");
-    return;
-  }
+  if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (req.method !== "POST") { res.status(405).send("Method Not Allowed"); return; }
 
   const { matchData } = req.body;
-  if (!matchData) {
-    res.status(400).send("matchData is required");
-    return;
-  }
+  if (!matchData) { res.status(400).send("matchData is required"); return; }
 
   const apiKey = process.env.ANTHROPIC_KEY;
 
-  const prompt = `あなたはFC Dauratの熱狂的サポーターでもあるスペイン系サッカー専門紙「EL DAURAT」の記者です。以下の試合データをもとに、FC Dauratを徹底的に贔屓した新聞の見出し・サブ見出し・一言コメントを生成してください。
+  // スコアから勝敗を判定
+  const scoreMatch = matchData.match(/FC Daurat (\d+) - (\d+)/);
+  let resultText = "引き分け";
+  if (scoreMatch) {
+    const sH = parseInt(scoreMatch[1]);
+    const sA = parseInt(scoreMatch[2]);
+    if (sH > sA) resultText = "勝利";
+    else if (sH < sA) resultText = "敗戦";
+  }
+
+  const prompt = `あなたはFC Dauratの熱狂的サポーターでもあるスペイン系サッカー専門紙「EL DAURAT」の記者です。
+以下の試合データをもとに新聞の見出し・サブ見出し・一言コメントを生成してください。
 
 ${matchData}
 
+【重要】試合結果は「${resultText}」です。この結果を必ず反映させてください。
+- 勝利の場合：称賛・喜びのコメント
+- 敗戦の場合：悔しさ・励ましのコメント（絶対に勝利を示唆する表現を使わないこと）
+- 引き分けの場合：惜しむ・前向きなコメント
+
 以下のJSON形式のみで返してください。説明や余計なテキストは不要です：
 {
-  "headline": "大きな見出し（20文字以内、インパクト重視）",
+  "headline": "大きな見出し（20文字以内、インパクト重視、結果に合った内容）",
   "subheadline": "サブ見出し（30文字以内）",
   "comment": "記者の一言コメント（40文字以内、スペイン語感嘆詞を含む）",
   "rating": 5,
-  "result": "勝利"
+  "result": "${resultText}"
 }`;
 
   const body = JSON.stringify({
@@ -73,10 +79,7 @@ ${matchData}
     });
   });
 
-  apiReq.on("error", (e) => {
-    res.status(500).json({ error: e.message });
-  });
-
+  apiReq.on("error", (e) => { res.status(500).json({ error: e.message }); });
   apiReq.write(body);
   apiReq.end();
-});// updated 
+});
