@@ -1,0 +1,13 @@
+{
+  "name": "FC Daurat 観戦記録",
+  "short_name": "Daurat",
+  "description": "FC Daurat サッカー観戦記録アプリ",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0E1A3A",
+  "theme_color": "#0E1A3A",
+  "icons": [
+    { "src": "/daurat-logo.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/daurat-logo.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
