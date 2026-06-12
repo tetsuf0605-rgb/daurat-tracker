@@ -152,12 +152,17 @@ export default function App() {
   const [histDetail, setHistDetail] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [histLoading, setHistLoading] = useState(false);
-  const [editingEv, setEditingEv] = useState(null); // {histIdx, evIdx, mode:'edit'|'delete'|'add'}
+  const [editingEv, setEditingEv] = useState(null);
   const [editEvType, setEditEvType] = useState("goal");
   const [editEvTeam, setEditEvTeam] = useState("home");
   const [editEvNum, setEditEvNum] = useState("");
   const [editEvHalf, setEditEvHalf] = useState(1);
   const [editEvMin, setEditEvMin] = useState(1);
+  const [confirmEnd, setConfirmEnd] = useState(false); // 試合終了確認
+  const [editingMeta, setEditingMeta] = useState(false); // 履歴メタ情報編集
+  const [metaAway, setMetaAway] = useState("");
+  const [metaMatchType, setMetaMatchType] = useState("");
+  const [metaTournament, setMetaTournament] = useState("");
 
   const timerRef = useRef(null);
   const flashRef = useRef(null);
@@ -221,15 +226,29 @@ export default function App() {
     setMatch(nm);syncToRTDB(nm,roster);
   };
 
-  const halftime=()=>{
+  const halftime=(forceEnd=false)=>{
     let nm;
-    if(match.phase==="first"){const now=Date.now();nm=addSysEv({...match,phase:"ht",htAt:now,h1ms:now-match.ko},"ハーフタイム","🔔");}
+    if(match.phase==="first"){
+      // ハーフタイムか即時終了か確認
+      if(!forceEnd){
+        const now=Date.now();
+        nm=addSysEv({...match,phase:"ht",htAt:now,h1ms:now-match.ko},"ハーフタイム","🔔");
+      } else {
+        // 前半で直接試合終了
+        const rms=Math.max(0,Date.now()-match.ko);
+        const evs2=Array.isArray(match.evs)?match.evs:[];
+        nm={...match,phase:"end",evs:[...evs2,{sys:true,l:"試合終了",i:"🏁",rms,half:match.half,ts:Date.now()}]};
+        saveToFirestore(nm,awayName);
+        setConfirmEnd(false);
+      }
+    }
     else if(match.phase==="ht"){const now=Date.now();nm=addSysEv({...match,ko:match.ko+(now-match.htAt),phase:"second",half:2},"後半キックオフ","🟡");}
     else if(match.phase==="second"){
       const rms=Math.max(0,Date.now()-match.ko);
       const evs2=Array.isArray(match.evs)?match.evs:[];
       nm={...match,phase:"end",evs:[...evs2,{sys:true,l:"試合終了",i:"🏁",rms,half:match.half,ts:Date.now()}]};
       saveToFirestore(nm,awayName);
+      setConfirmEnd(false);
     }else return;
     setMatch(nm);syncToRTDB(nm,roster);
   };
@@ -273,7 +292,16 @@ export default function App() {
     setMatch(nm);syncToRTDB(nm,roster);
   };
 
-  const recalcScore=(evs)=>{
+  const saveHistMeta=async(histIdx,away,matchType,tournamentName)=>{
+    const h=history[histIdx];
+    try{
+      await updateDoc(doc(firestore,"matches",h.id),{away,matchType,tournamentName});
+      const updated=[...history];
+      updated[histIdx]={...h,away,matchType,tournamentName};
+      setHistory(updated);
+      setEditingMeta(false);
+    }catch(e){console.error(e);}
+  };
     let sH=0,sA=0;
     evs.forEach(e=>{
       if(!e.sys&&e.type==="goal"&&e.team===HOME)sH++;
@@ -339,7 +367,7 @@ export default function App() {
   };
 
   const phaseLabel={pre:"未開始",first:"前半進行中",ht:"ハーフタイム",second:"後半進行中",end:"試合終了"}[match.phase]||"";
-  const htLabel=match.phase==="first"?"ハーフタイム":match.phase==="ht"?"後半開始":match.phase==="second"?"試合終了":"—";
+  const htLabel=match.phase==="first"?"ハーフタイム":match.phase==="ht"?"後半開始":match.phase==="second"?"試合終了へ":"—";
   const btnsOn=match.phase==="first"||match.phase==="second";
   const isLive=match.phase==="first"||match.phase==="ht"||match.phase==="second";
   const rosterKeys=Object.keys(roster).sort((a,b)=>Number(a)-Number(b));
@@ -543,9 +571,41 @@ export default function App() {
           <button style={C.btnP(match.phase!=="pre")} disabled={match.phase!=="pre"} onClick={kickoff}>
             {match.phase==="pre"?"▶ キックオフ":"試合中…"}
           </button>
-          <button style={C.btnS(match.phase==="pre"||match.phase==="end")} disabled={match.phase==="pre"||match.phase==="end"} onClick={halftime}>
+          <button style={C.btnS(match.phase==="pre"||match.phase==="end")} disabled={match.phase==="pre"||match.phase==="end"}
+            onClick={()=>{
+              if(match.phase==="second"||match.phase==="first") setConfirmEnd(true);
+              else halftime();
+            }}>
             {htLabel}
           </button>
+
+          {/* 試合終了確認ダイアログ */}
+          {confirmEnd&&(
+            <div style={{background:"#fff8e1",border:`1.5px solid ${GOLD}`,borderRadius:12,padding:14,marginBottom:10}}>
+              <div style={{fontSize:14,fontWeight:500,color:NAVY,marginBottom:8}}>
+                {match.phase==="first"?"前半終了の処理を選んでください":"試合を終了しますか？"}
+              </div>
+              {match.phase==="first"&&(
+                <div style={{fontSize:12,color:"#666",marginBottom:10}}>一本勝負の場合は「試合終了」を選択してください</div>
+              )}
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {match.phase==="first"&&(
+                  <button onClick={()=>{setConfirmEnd(false);halftime(false);}}
+                    style={{padding:11,background:NAVY,color:GOLD_L,border:"none",borderRadius:10,fontSize:14,fontWeight:500,cursor:"pointer",borderBottom:`2px solid ${GOLD}`}}>
+                    ⏸ ハーフタイムへ（後半あり）
+                  </button>
+                )}
+                <button onClick={()=>halftime(true)}
+                  style={{padding:11,background:"#c0392b",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:500,cursor:"pointer"}}>
+                  🏁 試合終了（後半なし）
+                </button>
+                <button onClick={()=>setConfirmEnd(false)}
+                  style={{padding:9,background:"#f5f5f5",color:"#666",border:"0.5px solid #ccc",borderRadius:10,fontSize:13,cursor:"pointer"}}>
+                  キャンセル
+                </button>
+              </div>
+            </div>
+          )}
 
           {match.phase==="end"&&(
             <div style={{background:"#f0faf3",border:"0.5px solid #2d8a4e",borderRadius:12,padding:16,marginBottom:12,textAlign:"center"}}>
@@ -773,9 +833,59 @@ export default function App() {
           {histDetail!==null?(
             <div>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-                <button onClick={()=>{setHistDetail(null);setEditingEv(null);}} style={{padding:"8px 16px",background:"#f5f5f5",border:"0.5px solid #ccc",borderRadius:8,fontSize:13,cursor:"pointer"}}>← 一覧に戻る</button>
-                <button onClick={()=>setDeleteConfirm(history[histDetail].id)} style={{padding:"8px 16px",background:"#fff0f0",border:"0.5px solid #e8a0a0",borderRadius:8,fontSize:13,color:"#c0392b",cursor:"pointer"}}>🗑 削除</button>
+                <button onClick={()=>{setHistDetail(null);setEditingEv(null);setEditingMeta(false);}} style={{padding:"8px 16px",background:"#f5f5f5",border:"0.5px solid #ccc",borderRadius:8,fontSize:13,cursor:"pointer"}}>← 一覧に戻る</button>
+                <div style={{display:"flex",gap:6}}>
+                  <button onClick={()=>{
+                    const h=history[histDetail];
+                    setMetaAway(h.away||"");
+                    setMetaMatchType(h.matchType||"フレンドリーマッチ");
+                    setMetaTournament(h.tournamentName||"");
+                    setEditingMeta(true);
+                  }} style={{padding:"8px 14px",background:"#f0f7ff",border:"0.5px solid #3498db",borderRadius:8,fontSize:13,color:"#1a5276",cursor:"pointer"}}>✏️ 試合情報</button>
+                  <button onClick={()=>setDeleteConfirm(history[histDetail].id)} style={{padding:"8px 14px",background:"#fff0f0",border:"0.5px solid #e8a0a0",borderRadius:8,fontSize:13,color:"#c0392b",cursor:"pointer"}}>🗑 削除</button>
+                </div>
               </div>
+
+              {/* メタ情報編集パネル */}
+              {editingMeta&&(
+                <div style={{background:"#f8f8f8",border:`1.5px solid ${GOLD}`,borderRadius:12,padding:14,marginBottom:12}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                    <span style={{fontSize:14,fontWeight:500,color:NAVY}}>✏️ 試合情報を編集</span>
+                    <button onClick={()=>setEditingMeta(false)} style={{background:"none",border:"0.5px solid #ccc",borderRadius:6,padding:"3px 10px",fontSize:12,color:"#666",cursor:"pointer"}}>✕</button>
+                  </div>
+                  <div style={{marginBottom:8}}>
+                    <label style={{fontSize:12,color:"#666",display:"block",marginBottom:4}}>試合種別</label>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                      {MATCH_TYPES.map(t=>(
+                        <button key={t.value} onClick={()=>setMetaMatchType(t.value)}
+                          style={{padding:"6px 14px",borderRadius:20,fontSize:12,fontWeight:500,cursor:"pointer",
+                            border:metaMatchType===t.value?"none":"0.5px solid #ccc",
+                            background:metaMatchType===t.value?(t.official?"#e74c3c":NAVY):"#fff",
+                            color:metaMatchType===t.value?"#fff":t.official?"#e74c3c":"#333"}}>
+                          {t.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div style={{marginBottom:8}}>
+                    <label style={{fontSize:12,color:"#666",display:"block",marginBottom:4}}>大会名・備考（任意）</label>
+                    <input type="text" value={metaTournament} onChange={e=>setMetaTournament(e.target.value)}
+                      placeholder="例: 〇〇カップ、第3節 など"
+                      style={{width:"100%",padding:"8px 10px",fontSize:13,border:"0.5px solid #ccc",borderRadius:8,background:"#fff",boxSizing:"border-box"}}/>
+                  </div>
+                  <div style={{marginBottom:12}}>
+                    <label style={{fontSize:12,color:"#666",display:"block",marginBottom:4}}>相手チーム名</label>
+                    <input type="text" value={metaAway} onChange={e=>setMetaAway(e.target.value)}
+                      placeholder="例: 光が丘FC"
+                      style={{width:"100%",padding:"8px 10px",fontSize:13,border:"0.5px solid #ccc",borderRadius:8,background:"#fff",boxSizing:"border-box"}}/>
+                  </div>
+                  <div style={{display:"flex",gap:8}}>
+                    <button onClick={()=>setEditingMeta(false)} style={{flex:1,padding:10,background:"#f5f5f5",border:"0.5px solid #ccc",borderRadius:8,fontSize:13,cursor:"pointer"}}>キャンセル</button>
+                    <button onClick={()=>saveHistMeta(histDetail,metaAway,metaMatchType,metaTournament)}
+                      style={{flex:1,padding:10,background:NAVY,color:GOLD_L,border:"none",borderRadius:8,fontSize:13,fontWeight:500,cursor:"pointer"}}>保存する</button>
+                  </div>
+                </div>
+              )}
               <div style={{background:NAVY,padding:"12px 14px",marginBottom:10,borderBottom:`2px solid ${GOLD}`,borderRadius:12}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}>
                   <div style={{flex:1,textAlign:"center"}}>
