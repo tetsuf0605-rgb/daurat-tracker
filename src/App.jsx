@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import React from "react";
 import { initializeApp } from "firebase/app";
 import { getDatabase, ref, set, onValue, off } from "firebase/database";
 import { getFirestore, collection, addDoc, getDocs, orderBy, query, deleteDoc, doc, updateDoc } from "firebase/firestore";
@@ -385,39 +386,40 @@ export default function App() {
 
   const MatchTimeline=({m,editable,histIdx})=>{
     const srt=[...(Array.isArray(m.evs)?m.evs:[])].sort((a,b)=>a.ts-b.ts);
-    if(!srt.length)return React.createElement("div",{style:{textAlign:"center",color:"#aaa",fontSize:13,padding:20}},"まだ記録がありません");
-    return React.createElement(React.Fragment,null,
-      srt.map((e,i)=>{
-        const isGoalHome=!e.sys&&e.type==="goal"&&e.team===HOME;
-        const cls=e.sys?"sy":e.type==="goal"?"gh":e.type==="concede"?"gc":"";
-        return React.createElement("div",{key:i,style:tlStyle(cls,isGoalHome)},
-          React.createElement("span",{style:{fontVariantNumeric:"tabular-nums",color:e.sys?"#aaa":isGoalHome?NAVY:"#2A3F72",fontWeight:isGoalHome?700:500,whiteSpace:"nowrap",minWidth:90,fontSize:12}},
-            e.sys?"—":evTime(e.rms,e.half,m.h1ms||0)
-          ),
-          React.createElement("span",{style:{fontSize:isGoalHome?18:15}},e.i),
-          React.createElement("span",{style:{flex:1,fontSize:e.sys?11:13,color:e.sys?"#aaa":isGoalHome?"#7a4a00":"#333",fontWeight:isGoalHome?700:400}},
-            e.sys?e.l:[e.num?plbl(e.num,e.pname):"",e.l,e.team?"("+e.team+")":""].filter(Boolean).join(" ")+(isGoalHome?" 🌟":"")
-          ),
-          editable&&!e.sys&&React.createElement("div",{style:{display:"flex",gap:4,flexShrink:0}},
-            React.createElement("button",{
-              onClick:()=>{
-                setEditEvType(e.type);
-                setEditEvTeam(e.team===HOME?"home":e.team?"away":"");
-                setEditEvNum(e.num||"");
-                const off=e.half===2?(m.h1ms||0):0;
-                setEditEvHalf(e.half||1);
-                setEditEvMin(Math.floor((e.rms+off)/60000)+1);
-                setEditingEv({histIdx,evIdx:i,mode:"edit"});
-              },
-              style:{background:"none",border:"0.5px solid #ccc",borderRadius:4,color:"#888",cursor:"pointer",fontSize:11,padding:"2px 5px"}
-            },"✏️"),
-            React.createElement("button",{
-              onClick:()=>setEditingEv({histIdx,evIdx:i,mode:"delete"}),
-              style:{background:"none",border:"0.5px solid #e8a0a0",borderRadius:4,color:"#c0392b",cursor:"pointer",fontSize:11,padding:"2px 5px"}
-            },"🗑")
-          )
-        );
-      })
+    if(!srt.length)return <div style={{textAlign:"center",color:"#aaa",fontSize:13,padding:20}}>まだ記録がありません</div>;
+    return (
+      <>
+        {srt.map((e,i)=>{
+          const isGoalHome=!e.sys&&e.type==="goal"&&e.team===HOME;
+          const cls=e.sys?"sy":e.type==="goal"?"gh":e.type==="concede"?"gc":"";
+          return (
+            <div key={i} style={tlStyle(cls,isGoalHome)}>
+              <span style={{fontVariantNumeric:"tabular-nums",color:e.sys?"#aaa":isGoalHome?NAVY:"#2A3F72",fontWeight:isGoalHome?700:500,whiteSpace:"nowrap",minWidth:90,fontSize:12}}>
+                {e.sys?"—":evTime(e.rms,e.half,m.h1ms||0)}
+              </span>
+              <span style={{fontSize:isGoalHome?18:15}}>{e.i}</span>
+              <span style={{flex:1,fontSize:e.sys?11:13,color:e.sys?"#aaa":isGoalHome?"#7a4a00":"#333",fontWeight:isGoalHome?700:400}}>
+                {e.sys?e.l:[e.num?plbl(e.num,e.pname):"",e.l,e.team?"("+e.team+")":""].filter(Boolean).join(" ")+(isGoalHome?" 🌟":"")}
+              </span>
+              {editable&&!e.sys&&(
+                <div style={{display:"flex",gap:4,flexShrink:0}}>
+                  <button onClick={()=>{
+                    setEditEvType(e.type);
+                    setEditEvTeam(e.team===HOME?"home":e.team?"away":"");
+                    setEditEvNum(e.num||"");
+                    const off=e.half===2?(m.h1ms||0):0;
+                    setEditEvHalf(e.half||1);
+                    setEditEvMin(Math.floor((e.rms+off)/60000)+1);
+                    setEditingEv({histIdx,evIdx:i,mode:"edit"});
+                  }} style={{background:"none",border:"0.5px solid #ccc",borderRadius:4,color:"#888",cursor:"pointer",fontSize:11,padding:"2px 5px"}}>✏️</button>
+                  <button onClick={()=>setEditingEv({histIdx,evIdx:i,mode:"delete"})}
+                    style={{background:"none",border:"0.5px solid #e8a0a0",borderRadius:4,color:"#c0392b",cursor:"pointer",fontSize:11,padding:"2px 5px"}}>🗑</button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </>
     );
   };
 
